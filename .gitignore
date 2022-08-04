@@ -1,3 +1,9 @@
+# markdown-slides files
+*.html
+*LICENSE
+*.js
+*.css
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
