@@ -464,9 +464,227 @@ asyncio.run(mycoro(…))
 
 [comment]: $ (!!!)
 
-# 
+# Software design
+
+Want to have software:
+- secure
+- high performance
+- high reliability
+- easy mantainability
+
+Types of design discussed here:
+- design by contract (DbC)
+- defensive programming
+- separation of concerns
+
+[comment]: $ (!!!)
+
+# Design by Contract (DbC)
+
+Makes it easier to spot where errors are occuring.
+Rules that define what every part of code expects to be able to function.
+What the caller is expecting from the parts of code.
+**The contract**
+entails preconditions and postconditions, and sometimes invariants and side effects
+
+preconditions
+- validate incoming data
+postconditions
+- validate data returned from code
+
+document invariants (things that will not change) and side effects
+
+Client should provide proper inputs and preconditions check for this. Supplier (code - routine, class) should provide proper returned data.
+
+Add control methods to functions, classes, and methods, and return `RuntimeError` exception or `ValueError` if any problems.
+
+Can use separate functions for pre/post val, but also decorators.
+
+[comment]: $ (!!!)
+
+# Defensive programming
+
+Make objects, functions, methods able to protect themselves against improper inputs.
+
+Handling errors that are expected and conditions that should never occur, with error handling and assertions.
+
+Can do with:
+- value substitution
+- error logging
+- raising/handling exceptions
+
+Careful with value substition since it can hide problems. Can also use defaults for missing data.
+
+E.g. dict.get() and os.environ.get() or os.getenv() (second arg can be a default)
+
+Don't use exceptions as a go-to mechanism for business logic, instead raise exceptions
+
+If a function raises too many exceptions, it may not be encapsulated enough and needs to be broken up (functions should do one thing, and one thing only).
+
+Don't expose exceptions to end users for security.
+[comment]: $ (!!!)
+
+# the most diabolical Python anti-pattern
+- Empty exception blocks - avoid
+- Silently passes without doing anything
+- Zen of Python - errors should never pass silently
+- Configure CI tools to report on empty exception blocks
+
+Instead
+- catch a more specific exception
+- perform some error handling in the except block
+
+Can do:
+- use logger.exception or logger.error
+- substitute default value
+- raise another exception (including original exception)
+- use context lib, e.g. `contextlib.suppress(KeyError)`
+
+Can include original exception (will be in the `__cause__` attribute of the resulting exception):
+
+```python
+def process(data_dictionary, record_id):
+    try:
+        return data_dictionary[record_id]
+    except KeyError as e:
+        raise InternalDataError("Record not present") from e
+```
+
+[comment]: $ (!!!)
+
+# Assertions
+
+An assertion is a boolean condidion that must be held true in order for the program to be correct. They should not be mixed with business logic or control flow. E.g. don't use try/except with assertions:
+
+```python
+try:
+    assert condition.holds(), "Condition is not satisfied"
+except AssertionError:
+    print("ahhhh!")
+    alternative_procedure()
+```
+
+However, you could catch the assertion error so it can be logged but something else can be displayed to the user.
+
+Don't use function calls when catching AssertionErrors since they can have side effects. Instead, do something like:
+
+```python
+result = condition.holds()
+assert result > 0, f"Error with {result}"
+```
 
 
+
+[comment]: $ (!!!)
+
+# Separation of concerns
+
+- avoid ripple effects
+    - don't want exceptions trigging a cascade of problems through nested functions
+    - don't want to have to change code in many places for one small conceptual change
+- software should be easy to change
+- extends DbC
+
+[comment]: $ (!!!)
+
+# Cohesion and coupling
+
+Cohesion means that objects should have a small and well-defined purpose, and they should do as little as possible.
+E.g. unix commands that do one thing and do it well.
+
+Coupling refers to the idea of how two or more objects depend
+on each other. Bad coupling (e.g. objects or methods too dependent on each other) results in:
+- no code reuse
+- ripple effects
+- low level of abstraction
+
+Aim for high cohesion and low coupling.
+
+[comment]: $ (!!!)
+
+# Acronyms to live by
+
+- DRY/OAOO
+    - do not repeat yourself
+    - once and only once
+- YAGNI (you ain't gonna need it)
+    - don't overengineer
+    - don't try to anticpate future needs too much
+    - create code that solves the current problem and extend/adapt as needed
+- KIS/KISS (keep it simple)
+    - generally avoid more advanced features of Python like meta-classes (and metaprogramming, unless it is exactly the right solution)
+- EAFP/LBYL (easier to ask forgiveness than permission) (look before you leap)
+    - EAFP - typically try running some code, expecting it to work, but catching an exception if it doesn't, and then handling the corrective code on the except block
+    - LBYL - first check what we're going to use
+    - recommend EAFP because it's easier to read (and more performant in other languages like C++)
+
+
+[comment]: $ (!!!)
+
+# Inheritance
+
+- only subclass if the subclass will use most of the methods of the parent
+- http.server module a good example
+- exceptions good candidates for subclasses of Exception
+- other option is composition (creating classes from scratch)
+
+[comment]: $ (!!!)
+
+# Method Resolution Order (MRO) (C3 linearization)
+
+If using multiple inheritance like `class ConcreteModuleB23(BaseModule2, BaseModule3):`, we can get the resolution of identically-named methods with .mro() like `[cls.__name__ for cls in ConcreteModuleA12.mro()]`
+
+[comment]: $ (!!!)
+
+# Arguments in functions and methods
+
+- all args passed by value, so changes to a mutable (e.g. list) will change the original variable, but if immutable (e.g. string), doesn't change the original
+- don't mutate function args, can copy and return modified version if needed
+- can be passed by position and/or keyword, but if passed by keyword all args after it must be keyword too
+- can upack iterable of args with \*
+- partial unpacking possible (take only first x args)
+- \*\* for unpacking dicts (keyword args)
+- if we add a \ in the args, args before it cannot be keyword (position only): `def my_function(x, y, /):` (from Python 3.8 onwards)
+    - good if order doesn't matter, e.g. checking for anagrams between 2 strings
+    - most of the time don't need this
+- anything after \*args or \* is keyword only (more useful/common than positional only)
+- too many args is a code smell (bad code/design)
+    - can use reification, meaning pack multiple args into other objects
+    - more args, more likely a function is coupled with callers
+    - defining with `*args` and `**kwargs` makes it harder to read/understand
+        - can be useful when using wrappers or decorators though
+
+[comment]: $ (!!!)
+
+# Good software design
+
+- orthorgonality
+    - a change in one component doesn't affect another
+    - changes or side effects should be local
+    - unit tests will also be orthogonal (means regression testing not needed for changes)
+
+- code structure
+    - large files with lots of definitions is bad
+    - structure/arrange components by similarity
+    - can break things up into packages instead with `__init__.py` file in the directory
+        - definitions will be imported into init, also can include them in the `__all__` variable to make them exportable
+    - can create a `constants` file for constants used in a project
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
 [comment]: $ (!!!)
 [comment]: $ (!!!)
 [comment]: $ (!!!)
