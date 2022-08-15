@@ -6,6 +6,8 @@ Nathan George | Tink AB | July 24, 2022
 
 <img src="media/clean_code_cover.png" alt="book cover" width="500"/>
 
+https://github.com/PacktPublishing/Clean-Code-in-Python-Second-Edition
+
 
 [comment]: # (!!!)
 
@@ -669,6 +671,850 @@ If using multiple inheritance like `class ConcreteModuleB23(BaseModule2, BaseMod
     - can break things up into packages instead with `__init__.py` file in the directory
         - definitions will be imported into init, also can include them in the `__all__` variable to make them exportable
     - can create a `constants` file for constants used in a project
+
+[comment]: $ (!!!)
+
+# The SOLID principle
+
+- S: single responsibility
+- O: Open/closed (more maintainable code)
+- L: Liskov's substitution principle (proper class heirarchies)
+- I: interface segregation
+- D: Dependency inversion
+
+
+[comment]: $ (!!!)
+
+# SRP (Single responsibility principle)
+
+Software component, e.g. class, should only have one responsibility. If one thing in the domain problem changes, then we have to update the class/component. If we have to change the component for other reasons, the abstraction is incorrect and the component has too many responsibilities - create more objects to divide responsibilities.
+
+Avoid "god objects" which have many responsibilties or know too much about different domains.
+The smaller the class, the better.
+
+[comment]: $ (!!!)
+
+# Open/closed principle (OCP)
+
+Want classes to be open to extension (add new parts from domain problem) but closed to modification (not change existing parts)
+- avoid monothilic methods (trying to do too much in one function/class)
+- avoid big chains of elif statements
+
+e.g. this instead of chain of elif statements:
+
+```python
+class SystemMonitor:
+    """Identify events that occurred in the system."""
+    def __init__(self, event_data):
+        self.event_data = event_data
+
+    def identify_event(self):
+        for event_cls in Event.__subclasses__():
+            try:
+                if event_cls.meets_condition(self.event_data):
+                return event_cls(self.event_data)
+            except KeyError:
+                continue
+        return UnknownEvent(self.event_data)
+```
+
+Event class is polymorphic (original algorithm is intact but changes across the different classes). Static method allows us to call the method without instantiating the class first.
+
+Could also register classes with the `abc` module or create our own registry.
+
+`SystemMonitor.identify_event()` is closed to new types of events (don't need to modify it, just add another subclass of Event). Events are open for extension.
+
+Relates to effective use of polymorphism (single interface for entities of different types).
+
+[comment]: $ (!!!)
+
+# Liskov's substitution principle (LSP)
+
+- for any class, a client should be able to use any of its subtypes indistinguishably, without even noticing
+
+Original definition: if S is a subtype of T, then objects of type T may be replaced by objects of type S, without breaking the program
+
+`mypy` and `pylint` can help detect problems with LSP - use annotations / type hinting (`incompatible with supertype` error)
+
+LSP problem example (changing input and return types):
+
+```python
+class Event:
+    ...
+    def meets_condition(self, event_data: dict) -> bool:
+    return False
+
+class LoginEvent(Event):
+    def meets_condition(self, event_data: list) -> int:
+    return int(event_data)
+```
+
+- A subclass can never make preconditions stricter than they are defined on the parent class
+- A subclass can never make postconditions weaker than they are defined on the parent class
+
+LSP contributes to the OCP
+
+[comment]: $ (!!!)
+
+# Interface segregation principle (ISP)
+
+Interfaces should be small
+
+Interface: set of methods and properties and object exposes
+
+In Python, interfaces are implicitly defined by a class according to its methods.
+This is because Python follows the so-called **duck typing** principle.
+"If it walks like a duck, and quacks like a duck, it must be a duck."
+
+Can force each derived class to implement methods with @abstractmethod decorators.
+
+E.g.: instead of one class handling both JSON and XML, have 2 classes:
+
+```python
+from abc import ABCMeta, abstractmethod
+
+class XMLEventParser(metaclass=ABCMeta):
+    @abstractmethod
+    def from_xml(xml_data: str):
+        """Parse an event from a source in XML representation."""
+        class JSONEventParser(metaclass=ABCMeta):
+            ...
+
+    @abstractmethod
+    def from_json(json_data: str):
+        """Parse an event from a source in JSON format."""
+        ...
+
+    class EventParser(XMLEventParser, JSONEventParser):
+        """An event parser that can create an event from source data either
+        in XML or JSON format.
+        """
+        def from_xml(xml_data):
+            pass
+
+        def from_json(json_data: str):
+            pass
+```
+
+Doesn't mean each class should only have 1 method, but should do one thing.
+        
+
+[comment]: $ (!!!)
+
+# Dependency inversion principle (DIP)
+
+Protect our code by making it independent of things that are fragile, volatile, or out of our control.
+- dependency injection: the dependency can be provided (injected) dynamically
+
+bad:
+
+```python
+class EventStreamer:
+    def __init__(self):
+        self._target = Syslog()
+
+    def stream(self, events: list[Event]) -> None:
+        for event in events:
+            self._target.send(event.serialise())
+```
+
+good (with dependency injection):
+
+```python
+class EventStreamer:
+    def __init__(self, target: DataTargetClient):
+        self._target = target
+
+    def stream(self, events: list[Event]) -> None:
+        for event in events:
+            self._target.send(event.serialise())
+```
+
+Can make testing easier (e.g. provide dummy class instead of Syslog)
+
+Can use `pinject` package:
+
+```python
+class EventStreamer:
+    def __init__(self, target: DataTargetClient):
+        self.target = target
+
+    def stream(self, events: list[Event]) -> None:
+        for event in events:
+            self.target.send(event.serialise())
+    
+    class _EventStreamerBindingSpec(pinject.BindingSpec):
+        def provide_target(self):
+            return Syslog()
+
+object_graph = pinject.new_object_graph(binding_specs=[_EventStreamerBindingSpec()])
+
+# create the graph object, which we will use to get objects with the
+# dependencies already provided;
+event_streamer = object_graph.provide(EventStreamer)
+```
+
+similar to factory object
+
+[comment]: $ (!!!)
+
+# Decorators
+
+Used to be like this:
+
+```python
+def original(...):
+    ...
+original = modifier(original)
+```
+
+Now like this:
+
+```python
+@modifier
+def original(...):
+    ...
+```
+
+Can be used for any object, including functions, methods, generators, and classes.
+
+[comment]: $ (!!!)
+
+# Function decorators
+
+Best practice:
+```python
+class ControlledException(Exception):
+"""A generic exception on the program's domain."""
+
+def retry(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        last_raised = None
+        RETRIES_LIMIT = 3
+        for _ in range(RETRIES_LIMIT):
+            try:
+                return operation(*args, **kwargs)
+            except ControlledException as e:
+                logger.info("retrying %s", operation.__qualname__)
+                last_raised = e
+        
+        raise last_raised
+    
+    return wrapped
+```
+
+
+[comment]: $ (!!!)
+
+# Decorators for classes
+
+be careful not to abstract too much away, but beneficial for:
+
+- DRY
+- create smaller/simpler classes enhanced with decorators
+- transformations applied to classes easier to maintain than other approaches like meta-classes
+
+```python
+from dataclasses import dataclass
+
+def hide_field(field) -> str:
+    return "**redacted**"
+def format_time(field_timestamp: datetime) -> str:
+    return field_timestamp.strftime("%Y-%m-%d %H:%M")
+def show_original(event_field):
+    return event_field
+
+class EventSerializer:
+    def __init__(self, serialization_fields: dict) -> None:
+        self.serialization_fields = serialization_fields
+
+    def serialize(self, event) -> dict:
+        return {
+            field: transformation(getattr(event, field))
+            for field, transformation
+            in self.serialization_fields.items()
+        }
+
+class Serialization:
+    def __init__(self, **transformations):
+        self.serializer = EventSerializer(transformations)
+    def __call__(self, event_class):
+        def serialize_method(event_instance):
+            return self.serializer.serialize(event_instance)
+        event_class.serialize = serialize_method
+        return event_class
+
+@Serialization(
+username=str.lower,
+password=hide_field,
+ip=show_original,
+timestamp=format_time,
+)
+@dataclass
+class LoginEvent:
+    username: str
+    password: str
+    ip: str
+    timestamp: datetime
+```
+
+Order of decorators starts from bottom to top.
+
+This example is super confusing and I think makes the code harder to read/interpret.
+
+[comment]: $ (!!!)
+
+# Decorators with args
+
+Prefer keyword args instead of positional for clarity. Or be explicit that it takes no args with `def retry(operation, /):`
+
+This example is pretty confusing honestly.
+
+```python
+_DEFAULT_RETRIES_LIMIT = 3
+def with_retry(
+    retries_limit: int = _DEFAULT_RETRIES_LIMIT,
+    allowed_exceptions: Optional[Sequence[Exception]] = None,
+    ):
+    allowed_exceptions = allowed_exceptions or (ControlledException,) # type: ignore
+    def retry(operation):
+        @wraps(operation)
+        def wrapped(*args, **kwargs):
+            last_raised = None
+            for _ in range(retries_limit):
+                try:
+                    return operation(*args, **kwargs)
+                except allowed_exceptions as e:
+                    logger.warning(
+                    "retrying %s due to %s",
+                    operation.__qualname__, e
+                    )
+                    last_raised = e
+            raise last_raised
+        return wrapped
+    return retry
+```
+
+It looks nice as a decorator though.
+
+```python
+@with_retry()
+def run_operation(task):
+    return task.run()
+
+@with_retry(retries_limit=5)
+def run_with_custom_retries_limit(task):
+    return task.run()
+
+@with_retry(
+    retries_limit=4, allowed_exceptions=(ZeroDivisionError, AttributeError)
+)
+def run_with_custom_parameters(task):
+    return task.run()
+```
+[comment]: $ (!!!)
+
+# Object decorators
+
+Slightly less confusing than the triple-nested function. Also can hold a state of objects in the class.
+
+```python
+_DEFAULT_RETRIES_LIMIT = 3
+
+class WithRetry:
+    def __init__(
+        self,
+        retries_limit: int = _DEFAULT_RETRIES_LIMIT,
+        allowed_exceptions: Optional[Sequence[Exception]] = None,
+    ) -> None:
+        self.retries_limit = retries_limit
+        self.allowed_exceptions = allowed_exceptions or (ControlledException,)
+
+    def __call__(self, operation):
+        @wraps(operation)
+        def wrapped(*args, **kwargs):
+            last_raised = None
+            for _ in range(self.retries_limit):
+                try:
+                    return operation(*args, **kwargs)
+                except self.allowed_exceptions as e:
+                    logger.warning(
+                    "retrying %s due to %s",
+                    operation.__qualname__, e
+                    )
+                    last_raised = e
+            raise last_raised
+
+        return wrapped
+```
+[comment]: $ (!!!)
+
+# enable decorator flexibility
+
+Call it like @decorator() or @decorator
+
+```python
+def decorator(function=None, *, x=DEFAULT_X, y=DEFAULT_Y):
+    if function is None:
+        return lambda f: decorator(f, x=x, y=y)
+    
+    @wraps(function)
+    def wrapped():
+        return function(x, y)
+    return wrapped
+```
+
+Or `return partial(decorator, x=x, y=y)` instead of the lambda function.
+
+[comment]: $ (!!!)
+
+# Coroutine (async) decorators
+
+Need to return decorator that's async/coroutine if calling function is. Can do like this:
+```python
+import inspect
+
+def timing(callable):
+    @wraps(callable)
+    def wrapped(*args, **kwargs):
+        start = time.time()
+        result = callable(*args, **kwargs)
+        latency = time.time() - start
+        return {"latency": latency, "result": result}
+
+    @wraps(callable)
+    async def wrapped_coro(*args, **kwargs):
+        start = time.time()
+        result = await callable(*args, **kwargs)
+        latency = time.time() - start
+        return {"latency": latency, "result": result}
+
+    if inspect.iscoroutinefunction(callable):
+        return wrapped_coro
+    
+    return wrapped
+```
+[comment]: $ (!!!)
+
+# Extended syntax for decorators
+
+```python
+def _log(f, *args, **kwargs):
+    print(f"calling {f.__qualname__!r} with {args=} and {kwargs=}")
+    return f(*args, **kwargs)
+
+@(lambda f: lambda *args, **kwargs: _log(f, *args, **kwargs))
+def func(x):
+    return x + 1
+```
+
+The recommendation of this book for this feature is consistent with all the cases in
+which a more compact statement can be achieved: write the more compact version
+of the code as long as it doesn't hurt readability. If the decorator expression becomes
+hard to read, prefer the more verbose but simpler alternative of writing two or more
+functions.
+
+[comment]: $ (!!!)
+
+# Uses for Decorators
+- transforming parameters
+- tracing/logging
+- validating parameters
+- implementing retry operations
+- simplifying classes by moving repetative logic into decorators
+
+[comment]: $ (!!!)
+# Adapting function signatures
+
+If we have lots of code that's repeating some boilerplate, e.g.
+
+```python
+def resolver_function(root, args, context, info):
+    helper = DomainObject(root, args, context, info)
+    ...
+    helper.process()
+```
+
+We can simplify with
+
+```python
+@DomainArgs
+def resolver_function(helper):
+    helper.process()
+    ...
+```
+
+[comment]: $ (!!!)
+# Common decrorator mistakes
+
+- Preserving data about the wrapped object
+
+If you forgot the `@wraps` decorator from `functools`, you will lose info about the original function (qualname, docs, annotations, etc)
+
+```python
+def trace_decorator(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        logger.info("running %s", function.__qualname__)
+        return function(*args, **kwargs)
+    
+    return wrapped
+```
+
+Also gives the original function under the `__wraps__` attribute.
+
+In general, follows this pattern:
+
+```python
+def decorator(original_function):
+    @wraps(original_function)
+    def decorated_function(*args, **kwargs):
+        # modifications done by the decorator ...
+        return original_function(*args, **kwargs)
+    
+    return decorated_function
+```
+
+- Make sure code is in the wrapped section. Otherwise it gets run on import, since the syntax is `wrapped_func = wrapper_func(original_func)` and this happens upon import.
+
+- Can define a decorator as a class if it needs to work with functions and methods from classes. Complicated though, relies on a complicated statement as a method:
+
+```python
+def __get__(self, instance, owner):
+    if instance is None:
+        return self
+    return self.__class__(types.MethodType(self.function, instance))
+```
+
+Makes the object a description (descriptor).
+
+[comment]: $ (!!!)
+
+# General notes on decorators
+
+Good code is reused by having small, cohesive abstractions, not
+creating hierarchies.
+
+If there is not going to be too much reuse [of a decorator],
+then do not go for a decorator and opt for a simpler option (maybe just a separate
+function or another small class is enough).
+
+Rule of thumb: a component should be tried out at least three times before
+considering creating a generic abstraction in the sort of a reusable component
+
+- creating reusable components is three times harder than creating simple ones
+
+- Do not create the decorator in the first place from scratch. Wait until the
+pattern emerges and the abstraction for the decorator becomes clear, and
+then refactor.
+- keep the code in decorators to a minimum
+
+- single responsibility principle - e.g. break up the log/timing decorators into two decorators (each doing a separate thing, one timing, one logging)
+
+Good properties of decorators:
+- Encapsulation, or separation of concerns: client should invoke decorator as a 'black box'
+- Orthogonality: decouled from the decorated object
+- Reusability
+
+Good examples of decorators in Celery (@app.task), web frameworks like Pyramid, Flask, and Sanic (@route)
+
+[comment]: $ (!!!)
+
+# Descriptors
+
+Unique to Python, allow for more powerful and reusable abstractions.
+
+A descriptor is a class that implements at least one of the following:
+
+- `__get__`
+- `__set__`
+- `__delete__`
+- `__set_name__`
+
+Client class has an attribute (e.g. descriptor) that's an instance of the descriptor class.
+
+[comment]: $ (!!!)
+
+### Descriptor `__get__` method
+
+signature `__get__(self, instance, owner)`
+
+- instance is the object from which the descriptor is being called (e.g. client)
+- owner is the class of the client object
+
+In general, unless we really need to do something with the owner parameter, the
+most common idiom is to just return the descriptor itself when instance is None.
+e.g. called from the class directly, like `ClientClass.descriptor`
+
+### Set method `__set__(self, instance, value)`
+
+`client.descriptor = "value"`
+
+Usually for storing data in an object. Could abstract away validation of data, etc.
+
+### Delete method `__delete__(self, instance)`
+
+not as commonly used
+
+### Set name method `__set_name__(self, owner, name)`
+
+If a descriptor implements the __set__ or __delete__ methods, it is called a data
+descriptor. Otherwise, a descriptor that solely implements __get__ is a non-data
+descriptor. Notice that __set_name__ does not affect this classification at all.
+
+
+### Types of descriptiors
+
+If a descriptor implements the __set__ or __delete__ methods, it is called a data
+descriptor. Otherwise, a descriptor that solely implements __get__ is a non-data
+descriptor. Notice that __set_name__ does not affect this classification at all.
+
+Do not use setattr() or the assignment expression directly on the
+descriptor inside the __set__ method because that will trigger an
+infinite recursion.
+
+[comment]: $ (!!!)
+
+# Example
+Traveler who has a current city and has visited cities and we want to keep track of them through runtime.
+
+```python
+class Traveler:
+    def __init__(self, name, current_city):
+        self.name = name
+        self._current_city = current_city
+        self._cities_visited = [current_city]
+
+    @property
+    def current_city(self):
+        return self._current_city
+
+    @current_city.setter
+    def current_city(self, new_city):
+        if new_city != self._current_city:
+            self._cities_visited.append(new_city)
+
+        self._current_city = new_city
+
+    @property
+    def cities_visited(self):
+    return self._cities_visited
+```
+
+What would happen if we want to do the same with other
+attributes, such as keeping track of all the tickets Alice bought, or all the countries
+she has been to? We would have to repeat the logic in all of these places.
+
+That is the true Pythonic nature of descriptors. They are more appropriate for
+defining libraries, frameworks, and internal APIs, but less so for business logic.
+
+[comment]: $ (!!!)
+
+Use `__dict__` to store values for each instance unless you want them to be shared across instances.
+
+Can use `from weakref import WeakKeyDictionary` to track values for each instance so that we don't get circular dependencies.
+
+Can use `@property` which is a specific descriptor, or a custom descirptor for more advanced things.
+
+Avoid putting business login in descriptors.
+
+
+[comment]: $ (!!!)
+
+# Slots
+
+`__slots__` is a class attribute to define a fixed set of fields an object of that class can have.
+
+In Python the internal representation for objects is done with dictionaries.
+
+With the use of __slots__, Python will only reserve enough memory for the
+attributes defined on it on the new objects as they're created. This will make the
+objects not have a __dict__ attribute, so they can't be changed dynamically, and any
+attempt to use its dictionary
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Coordinate2D:
+    __slots__ = ("lat", "long")
+    lat: float
+    long: float
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.lat}, {self.long})"
+```
+
+side effect that we cannot mix class attributes
+with instance ones
+
+Use with caution
+
+reserved only for
+objects that we know are static, and if we are absolutely sure we are not adding any
+attributes to them dynamically in other parts of the code
+
+objects defined with slots use less memory
+
+Use a decorator class when defining a decorator that we want to
+apply to class methods, and implement the `__get__()` method on
+it.
+
+`__delete__` seldom required, usually only need `__get__`
+
+[comment]: $ (!!!)
+# Generators
+
+Minimize memory use
+Loads iterator items one at a time as needed
+Lazy computation (like Haskell)
+
+Use `yield` keyword
+
+Can use next and stopiteration exceptions like:
+
+```python
+def _initialize(self):
+    try:
+        first_value = next(self.purchases)
+    except StopIteration:
+        raise ValueError("no values provided")
+```
+
+Polymorphic for `for` loops
+
+Replace brackets with parentheses to get a generator instead of list/for loop
+Good for things like min/max/sum like `sum(x**2 for x in range(10))`
+
+Use `__next__` and `__iter__` magic methods to create iterables
+
+```python
+class SequenceOfNumbers:
+    def __init__(self, start=0):
+        self.current = start
+    
+    def __next__(self):
+        current = self.current
+        self.current += 1
+        return current
+    
+    def __iter__(self):
+        return self
+
+list(zip(SequenceOfNumbers(), "abcdef"))
+```
+
+`next()` built-in function advances iterator and returns next item in iterator
+
+Can also provide default to be provided if at end of iterable (instead of StopIteration exception): `next(word, "default value")`
+
+Better with generator:
+
+```python
+def sequence(start=0):
+    while True:
+        yield start
+        start += 1
+```
+
+Can use itertools to do a lot with generators, like filtering `from itertools import islice` `purchases = islice(filter(lambda p: p > 1000.0, purchases), 10)`
+
+Can avoid looping over the same object multiple times:
+
+```python
+def process_purchases(purchases):
+    min_, max_, avg = itertools.tee(purchases, 3)
+    return min(min_), max(max_), median(avg)
+```
+
+Flatten loops if possible with generators
+
+If we call `close()` from a generator, it throws GeneratorExit and we can call close() in the generator.
+
+`throw()` throws an error from a generator
+
+`send()` to send values, but should have started the generator with `next()` first
+Can use `@prepare_coroutine` decorator for this
+
+Can have a `return` at the end of a generator which yields that value with the StopIteration exception at the end
+Or `yield from`: the new yield from syntax can be used to chain generators
+from nested for loops into a single one, which will end up with a single string of
+all the values in a continuous stream.
+
+We can use yield from to capture the last value of a coroutine
+after it has finished its processing.
+
+[comment]: $ (!!!)
+
+# Async with generators
+
+This means that we can create programs that have many coroutines,
+schedule them to work in a particular order, and switch between them when they're
+suspended after a yield from has been called on each of them.
+
+
+The main advantage that we can take from this is the possibility of parallelizing I/O
+operations in a non-blocking way. What we would need is a low-level generator
+(usually implemented by a third-party library) that knows how to handle the
+actual I/O while the coroutine is suspended.
+
+We
+typically create coroutines with the goal of running non-blocking I/O operations.
+
+uvloop and trio packages
+
+async magic methods:
+context manager:
+`__aenter__`
+`__aexit__`
+iteration:
+`__aiter__`
+`__anext__`
+
+@asynccontextmanager decorator available in the contextlib module `@contextlib.asynccontextmanager`, also `AbstractAsyncContextManager`
+
+with `__anext__` and `__aiter__` can use async iteration like `async for row in RecordStreamer(10):` and `await async_iterator.__anext__()`
+
+test interactively how async works with `python -m asyncio`
+
+whenever possible you try to favor asynchronous
+generators over iterators
+
+
+[comment]: $ (!!!)
+
+# Unit testing
+
+
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
+[comment]: $ (!!!)
 [comment]: $ (!!!)
 [comment]: $ (!!!)
 [comment]: $ (!!!)
