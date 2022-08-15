@@ -1481,61 +1481,657 @@ test interactively how async works with `python -m asyncio`
 whenever possible you try to favor asynchronous
 generators over iterators
 
+Can use `unittest.mock.Mock()` but should restrict testing to the boundaries of our code
 
 [comment]: $ (!!!)
 
 # Unit testing
 
+Unit tests validate other parts of code and are a core critical component of software.
+Should take parts of the code with business logic and test the logic works.
+Formal proof the code works as intended.
+Using tests and designing code to be easy to test can make the code better.
 
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
-[comment]: $ (!!!)
+- isolated: they do not connect to a database, they don't perform HTTP requests, and so on
+- performance: must run quickly so they can be run multiple times
+- repeatability: not flaky or random, should continue failing or passing consistently depending on conditions
+- self-validating: execution of the test determines its result (no extra steps needed)
+
+We want our unit tests to reach a very detailed level of granularity, testing
+as much code as possible. To test something bigger, such as a class, we would not
+want to use just unit tests, but rather a test suite, which is a collection of unit tests.
+Each one of them will be testing something more specific, like a method of that class.
+
+Also acceptance and integration tests
+integration - also included other connections, e.g. to a database (or mock the DB) (mocking also allows component testing)
+acceptance - validate the system from the perspective of the user, executing use cases
+
+practicality beats purity - if you need to do something like launch a Docker container to run a unit test for a DB, go for it
 
 
+can use:
+- unittest (based on JUnit from Java, in turn based on Smalltalk)
+    - group tests by scenarios in classes
+- pytest
+
+pyest better for more complex systems
+on which we have multiple dependencies, connections to external systems, and
+probably the need to patch objects, define fixtures, and parameterize test cases
+
+
+[comment]: $ (!!!)
+
+# unittest
+
+subclass, then use functions:
+
+```python
+class TestMergeRequestStatus(unittest.TestCase):
+    def test_simple_rejected(self):
+        merge_request = MergeRequest()
+        merge_request.downvote("maintainer")
+        self.assertEqual(merge_request.status, MergeRequestStatus.
+        REJECTED)
+```
+
+Can use many asserts, like assertRaises and assertRaisesRegex
+
+Can also use context managers like
+
+```python
+with self.assertRaises(MyException):
+    test_logic()
+```
+
+Can parameterize tests to check multiple conditions:
+
+```python
+class TestAcceptanceThreshold(unittest.TestCase):
+    def setUp(self):
+        self.fixture_data = (
+        (
+        {"downvotes": set(), "upvotes": set()},
+        MergeRequestStatus.PENDING
+        ),
+        ...
+
+    def test_status_resolution(self):
+        for context, expected in self.fixture_data:
+            with self.subTest(context=context):
+                ... assert something
+```
+
+If you choose to parameterize tests, try to provide the context
+of each instance of the parameters with as much information as
+possible to make debugging easier.
+
+[comment]: $ (!!!)
+
+# pytest
+
+Can just write simple functions with assert statements, although classes and test scenarios are possible.
+pytest runs pytests and unittests.
+
+Parameterized tests are better:
+
+```python
+@pytest.mark.parametrize("context,expected_status", (
+(
+{"downvotes": set(), "upvotes": set()},
+MergeRequestStatus.PENDING
+),
+(
+{"downvotes": set(), "upvotes": {"dev1"}},
+MergeRequestStatus.PENDING,
+),
+(
+{"downvotes": "dev1", "upvotes": set()},
+MergeRequestStatus.REJECTED,
+),
+(
+{"downvotes": set(), "upvotes": {"dev1", "dev2"}},
+MergeRequestStatus.APPROVED,
+),
+),)
+def test_acceptance_threshold_status_resolution(context, expected_
+status):
+    assert AcceptanceThreshold(context).status() == expected_status
+```
+
+each parameter (every iteration) should correspond to only one testing scenario
+
+If you need to test
+for the combination of different parameters, then use different parameterizations
+stacked up. Stacking up this decorator will create as many test conditions as the
+cartesian product of all the values in the decorators.
+
+```python
+@pytest.mark.parametrize("x", (1, 2))
+@pytest.mark.parametrize("y", ("a", "b"))
+def my_test(x, y):
+    …
+```
+
+Will run for the values (x=1, y=a), (x=1, y=b), (x=2, y=a), and (x=2, y=b).
+
+## Fixtures
+
+Used to create objects/structures that will be used repeatedly:
+
+```python
+@pytest.fixture
+def rejected_mr():
+    merge_request = MergeRequest()
+    merge_request.downvote("dev1")
+    merge_request.upvote("dev2")
+    merge_request.upvote("dev3")
+    merge_request.downvote("dev4")
+    return merge_request
+
+def test_simple_rejected(rejected_mr):
+    assert rejected_mr.status == MergeRequestStatus.REJECTED
+
+def test_rejected_with_approvals(rejected_mr):
+    rejected_mr.upvote("dev2")
+    rejected_mr.upvote("dev3")
+    assert rejected_mr.status == MergeRequestStatus.REJECTED
+```
+
+Besides creating multiple objects or exposing data that will be used throughout the
+test suite, it's also possible to use them to set up some conditions, for example, to
+globally patch some functions that we don't want to be called, or when we want
+patch objects to be used instead.
+
+[comment]: $ (!!!)
+
+# Code coverage
+
+not a target, only a metric
+
+80% a typical value
+
+Can use packages like `covereage` or `pytest-cov`, can integrate with tools like sonarscanner/sonarcloud for overall code monitoring / CI/CD integration
+
+common scenario where we
+realize that to cover those missing lines, we need to refactor the code by creating
+smaller methods
+
+having good test coverage is a necessary
+but insufficient condition for clean code
+
+could be missing test cases but not coverage
+
+Python is interpreted and, at a very high level, coverage tools take advantage of this
+to identify the lines that were interpreted (run) while the tests were running.
+Doesn't mean it was properly tested even if run/interpreted.
+
+other possible
+combinations of parameters that would make the program crash (fuzzy testing)
+
+[comment]: $ (!!!)
+
+# Mock objects
+
+real unit tests don't use any actual service—they don't connect to any
+database, they don't issue HTTP requests, and basically, they do nothing other than
+exercise the logic of the production code.
+
+Integration tests are
+supposed to test functionality with a broader perspective, almost mimicking the
+behavior of a user. But they aren't fast.
+
+While mock objects are useful, abusing them ranges between a code smell or an antipattern.
+
+One of the main warnings that our code has
+code smells is whether we find ourselves trying to monkey patch (or mock) a lot of
+different things just to cover a simple test case.
+
+can use `unittest.mock.patch`
+
+Patching means that the original code (given by a string denoting its location at
+import time) will be replaced by something else, other than its original code. If no
+replacement object is provided, the default is a standard mock object that will simply
+accept all method calls or attributes is asked about.
+
+In unit testing terminology, there are several types of object that fall into the category
+named test doubles. A test double is a type of object that will take the place of a real
+one in our test suite for different kinds of reasons
+
+dummy objects, stubs, spies, or
+mocks.
+
+Mocks most general and easiet to use `unittest.mock.Mock` and `MagicMock`
+
+A mock is a type of object created to a specification (usually resembling the object
+of a production class) and some configured responses (that is, we can tell the mock
+what it should return upon certain calls, and what its behavior should be).
+
+
+it's usually a good idea to prevent all
+the unit tests from performing HTTP calls, so within the subdirectory for unit tests,
+we can add a fixture in the configuration file of pytest (tests/unit/conftest.py):
+
+```python
+@pytest.fixture(autouse=True)
+def no_requests():
+    with patch("requests.post"):
+        yield
+```
+
+This function will be invoked automatically in all unit tests (because of
+autouse=True), and when it does, it will patch the post function in the requests
+module.
+
+Refactoring is a critical activity in software maintenance, yet something that can't be
+done (at least not correctly) without having unit tests. This is because, as each change
+gets made, we need to know that our code is still correct.
+This constraint of having to support
+the same functionalities as before, but with a different version of the code, implies
+that we need to run regression tests on code that was modified. The only costeffective
+way of running regression tests is if those tests are automatic. The most
+cost-effective version of automatic tests is unit testing.
+
+[comment]: $ (!!!)
+
+# Testing tests
+
+## Property-based testing
+Property-based testing consists of generating data for tests cases to find scenarios
+that will make the code fail, which weren't covered by our previous unit tests.
+
+`hypothesis` package
+
+## Mutation testing
+
+With a mutation testing tool, the code will
+be modified to new versions (called mutants) that are variations of the original code,
+but with some of its logic altered (for example, operators are swapped, conditions
+are inverted).
+
+A good test suite should catch these mutants and kill them, in which case it means
+we can rely on the tests. If some mutants survive the experiment, it's usually a bad
+sign.
+
+`mutpy` package
+
+[comment]: $ (!!!)
+
+# Themes in Testing
+When you're writing unit
+tests, your mindset has to be all about breaking the code: you want to make sure you
+find errors so that you can fix them, and that they don't slip into production
+
+- Boundaries or limit values
+in a condition that checks for a range of values, check both ends of
+the interval. If the code deals with data structures (such as a list or a stack), check for
+an empty list, or a full stack, and make sure the indexes are always set correctly, even
+for values on their limits.
+Check special values (e.g. 0 if <0)
+
+- Classes of equivalence
+e.g. odd number can be 1 or 3
+
+- Edge cases
+if part of your code deals with dates, make sure you test for leap years,
+the 29th of February, and in or around the new year.
+
+- test driven design
+The idea behind TDD is that tests should be written before production code in a way
+that the production code is only written to respond to tests that are failing due to that
+missing implementation of the functionality.
+
+1. Write a unit test that describes how the code should behave. That can either
+be new functionality that still doesn't exist or current code that is broken, in
+which case the test describes the desired scenario. Running this test for the
+first time must fail.
+2. Make the minimal changes in the code to make that test pass. The test should
+now pass.
+3. Improve (refactor) the code and run the test again, making sure it still works.
+
+red-green-refactor
+
+[comment]: $ (!!!)
+
+# Design patterns
+
+Canonical book: Gang of Four (GoF) book, Design Patterns: Elements
+of Reusable Object-Oriented Software.
+
+23 patterns, creational, structural, and behavioral
+
+Some of the patterns are invisible in Python, and we use them
+probably without even noticing. Secondly, not all patterns are equally common;
+some of them are tremendously useful, and so they are found very frequently,
+while others are for more specific cases.
+
+
+[comment]: $ (!!!)
+
+# Creational patterns
+
+object instantiation
+
+5 patterns
+
+avoid the singleton pattern and replace it with the Borg pattern (most
+commonly used in Python applications)
+
+In python many of the factory patterns are not usually needed.
+
+simply define a function that will construct a set of objects, and we can
+even pass the class that we want to create with a parameter.
+
+or `pyinject` 
+
+### singletons
+a form of global variables for object-oriented software (bad) - avoid
+
+The idea of a singleton is to create
+a class that no matter how many times you invoke it, will always give you the same
+object.
+
+
+monostate pattern (SNGMONO) is that we can have many instances
+that are just regular objects, without having to care whether they're singletons or not
+they will have their information synchronized
+
+e.g. have an object that has to pull a version of some code in a Git repository
+by the latest tag
+
+In the case that we need more attributes, or that we wish to encapsulate the shared
+attribute a bit more, to make the design cleaner, we can use a descriptor.
+
+[comment]: $ (!!!)
+
+# Borg pattern
+
+The idea is to create an object that is capable of replicating all of its attributes among
+all instances of the same class.
+
+The idea is that we
+use a class attribute that is a dictionary to store the attributes, and then we make
+the dictionary of each object (at the time it's being initialized) use this very same
+dictionary.
+
+can use a mixin class
+
+[comment]: $ (!!!)
+
+# Builder pattern
+
+abstracts away all the complex initialization of an object
+
+The high-level idea of this pattern is that we need to create a complex object, that is,
+an object that also requires many others to work with.
+
+we will have a builder object that knows how to create all the parts
+and link them together, giving the user an interface (which could be a class method)
+to parametrize all the information about what the resulting object should look like.
+
+[comment]: $ (!!!)
+
+# Adapter/wrapper pattern
+
+This pattern solves the problem of adapting interfaces of
+two or more objects that are not compatible.
+
+2 ways:
+
+The first way would be to create a class that inherits from the one we need and create
+an alias for the method (if required, it will also have to adapt the parameters and
+the signature), which internally will adapt the call to make it compatible with the
+method we need
+
+if this inherits a lot of stuff, a better approach would be to use composition instead
+
+If we need to adapt multiple methods, and we can devise a generic way of adapting
+their signature as well, it might be worth using the __getattr__() magic method
+to redirect requests toward the wrapped object, but as always with generic
+implementations, we should be careful of not adding more complexity to the
+solution.
+
+be careful with this because this method will
+create something so generic that it might be even riskier and have unanticipated side
+effects
+
+If we want to perform transformations or extra functionality over an object,
+while keeping its original interface, the decorator pattern is a much better option
+
+[comment]: $ (!!!)
+
+# Composite pattern
+
+The composite object will act as a client; this will also pass this request along with all the objects
+it contains, whether they are leaves or other intermediate notes, until they are all
+processed.
+
+[comment]: $ (!!!)
+
+# Decorator pattern
+
+Not the same as Python decorators.
+
+allows us to dynamically extend the functionality of some objects,
+without needing inheritance. It's a good alternative to multiple inheritance in
+creating more flexible objects.
+
+The design is to create another object, with the same interface and the capability
+of enhancing (decorating) the original result through many steps, but that can
+be combined. These objects are chained, and each one of them does what it was
+originally supposed to do, plus something else. This something else is the particular
+decoration step.
+
+[comment]: $ (!!!)
+# Facade pattern
+
+It's useful in many situations where we want to
+simplify the interaction between objects. The pattern is applied where there is a
+relation of many-to-many among several objects, and we want them to interact.
+Instead of creating all of these connections, we place an intermediate object in
+front of many of them that act as a facade.
+
+The facade works as a hub or a single point of reference in this layout. Every time a
+new object wants to connect to another one, instead of having to have N interfaces
+for all N possible objects it needs to connect to (requiring O(N2) total connections),
+it will instead just talk to the facade, and this will redirect the request accordingly
+
+[comment]: $ (!!!)
+
+# Behavioral patterns
+
+Behavioral patterns aim to solve the problem of how objects should cooperate, how
+they should communicate, and what their interfaces should be at runtime.
+
+### Chain of responsibility
+Each event still has the logic to determine whether or not it can process a particular
+log line, but it will also have a successor. This successor is a new event, the next
+one in the line, that will continue processing the text line in case the first one was
+not able to do so. The logic is simple—we chain the events, and each one of them
+tries to process the data. If it can, then it just returns the result. If it can't, it will
+pass it to its successor and repeat,
+
+### template method
+
+The idea is that there is a class hierarchy that defines some behavior, let's say an
+important method of its public interface. All of the classes of the hierarchy share a
+common template and might need to change only certain elements of it. The idea,
+then, is to place this generic logic in the public method of the parent class that will
+internally call all other (private) methods, and these methods are the ones that the
+derived classes are going to modify; therefore, all the logic in the template is reused.
+
+### command pattern
+
+The command pattern provides us with the ability to separate an action that needs to
+be done from the moment that it is requested to its actual execution.
+
+examples `psycopg2` and `SQLAlchemy`
+
+[comment]: $ (!!!)
+
+# state pattern
+
+The state pattern is a clear example of reification in software design, making the
+concept of our domain problem an explicit object rather than just a side value (for
+example, using strings or integer flags to represent values or managing state)
+
+[comment]: $ (!!!)
+
+# null state pattern
+
+functions or methods must return objects of a
+consistent type. If this is guaranteed, then clients of our code can use the objects that
+are returned with polymorphism, without having to run extra checks on them
+
+if empty, should return a null/empty object
+this null object should just have the same methods as the original user
+and do nothing for each one of them.
+
+
+note: If the design is good and the code is clean, it should speak for itself. It is not
+recommended that you name things after the design patterns you are using
+
+Mentioning the design patterns in docstrings might be acceptable because they
+work as documentation, and expressing the design ideas (again, communicating) in
+our design is a good thing. However, this should not be needed
+
+[comment]: $ (!!!)
+
+# Clean archicture
+
+scalability, security,
+performance, and endurance
+
+component to refer to one of these cohesive
+units (it might be a class, for example).
+For Python projects, a component could be a package, but a service can also be a
+component.
+
+monolithic bad:
+One option would be to identify common logic that is likely to be reused multiple
+times and place it in a Python package (we will discuss the details later in the chapter).
+Another alternative would be to break the application down into multiple smaller
+services, in a microservice architecture.
+
+Consider the
+possibility of packaging that logic as a library to be imported by other components.
+Of course, this is only viable as long as all other components are written in the same
+language; otherwise, yes, the microservices pattern is the only option left.
+
+Microservices: subject to service-level agreements (SLAs) and service-level objectives
+(SLOs), respectively.
+
+code has to be expressive (almost to the point of being selfdocumenting)
+
+architecture should tell us what the system is about
+A concept such as a screaming architecture (SCREAM) reflects this idea.
+
+
+This means that we don't abstract the database just with an ORM; we use the
+abstraction layer we create on top of it to define objects of our own that belong
+to our domain. If that abstraction just happens to use an ORM underneath, that's
+a coincidence; the domain layer (where our business logic lies) shouldn't be
+concerned with it.
+
+invert the dependency—this layer provides an API, and
+every storage component that wants to connect has to conform to this API. This is
+the concept of a hexagonal architecture (HEX).
+
+
+## packages
+A Python package is a convenient way to distribute software and reuse code in
+a more general way. Packages that have been built can be published to an artifact
+repository (such as an internal PyPi server for the company), from where they will
+be downloaded by the rest of the applications that require them.
+
+Minimal layout:
+```
+├── Makefile
+├── README.rst
+├── setup.py
+├── src
+│ └── apptool
+│ ├── common.py
+│ ├── __init__.py
+│ └── parse.py
+└── tests
+├── integration
+└── unit
+```
+
+The important part is the setup.py file, which contains the definition for the
+package. In this file, all the important definitions of the project (its requirements,
+dependencies, name, description, and so on) are specified.
+The apptool directory under src is the name of the library we're working on. This is
+a typical Python project, so we place here all the files we need.
+
+build package:
+
+```
+python –m venv env
+source env/bin/activate
+$VIRTUAL_ENV/bin/pip install -U pip wheel
+$VIRTUAL_ENV/bin/python setup.py sdist bdist_wheel
+```
+
+will place the artifacts in the dist/ directory, from where they can later be
+published either to PyPi or to the internal package repository of the company.
+
+- Test and verify that the installation is platform-independent and that it
+doesn't rely on any local setup (this can be achieved by placing the source
+files under an src/ directory).
+- Make sure that unit tests aren't shipped as part of the package being
+built. This is meant for production. In the Docker image that will run in
+production, you don't need extra files (for example, the fixtures) that aren't
+strictly needed.
+- Separate dependencies—what the project strictly needs to run is not the same
+as what developers require.
+- It's a good idea to create entry points for the commands that are going to be
+required the most.
+
+The best way to surmount os depenencies is to abstract the platform by
+creating a Docker image, as we will discuss in the next section.
+
+Software Configuration Management (SCM)
+issue
+
+dependabot to auto-upgrade packages
+pip-tools to compile requirements.txt file - tracks tree of upgrades of packages
+
+`pip-compile setup.py`
+
+your company must have an internal server for dependencies,
+and all builds must target this internal repository
+
+Having outdated versions of dependencies is another form of
+technical debt. Make the habit of using the latest versions available
+of your dependencies.
+
+Configure a tool that automatically sends pull requests for new
+versions of your dependencies, and also configure automatic
+security checks on them.
+
+PEP440 on how to set version numbers
+
+can use Docker containers with Dockerfile for Python projects as REST APIs
+
+entry_points keyword argument passed to setup function in setup.py
+
+```python
+entry_points={
+"console_scripts": [
+"status-service = statusweb.service:main",
+],
+},
+```
+Creates a binary file in `<virtual-env-root>/bin`
+
+The left-hand side of the equals sign declares the name of the entry point. In this
+case, we will have a command named status-service available. The right-hand
+side declares how that command should be run. It requires the package where the
+function is defined, followed by the function name after :. In this case, it will run the
+main function declared in statusweb/service.py.
+
+Then something like `CMD ["/usr/local/bin/status-service"]` in dockerfile.
 
 [comment]: # (!!!)
 
