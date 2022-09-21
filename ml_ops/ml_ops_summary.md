@@ -179,14 +179,59 @@ Push to production using automated build tools:
 - push to production and serve
 
 ---
-
-# DataOps
-
-Data engineering, e.g. airlfow, AWS Glue, etc, to automate ETL, feature stores, data processing/exports
-
----
 # DevOps
 
 Foundation for MLOps. First need automated testing / CI. With Python, need a project scaffold:
 
 ![python scaffold](images/python_project_scaffold.png)
+
+[Example here](https://github.com/noahgift/github-actions-demo)
+
+---
+# Makefile
+Makefile reduces work/errors, instead of `pylint --disable=R,C *.py` you can type `make lint` if you have 
+
+```
+lint:
+    pylint --disable=R,C hello.py
+```
+
+In your makefile.
+
+---
+
+# CD - continuous deployment/delivery
+
+![height:13cm cd diagram](images/cd_diagram.png)
+
+Use CD and IaC to push things like ML project into production.
+
+Load test with e.g. `locust` or `loader io`
+
+---
+
+# DataOps
+
+Data engineering, e.g. airlfow, AWS Glue (serverless ETL), etc, to automate ETL, feature stores, data processing/exports
+
+Airflow, AWS Data Pipeline, AWS Glue, etc
+
+Can use athena, quicksight, etc to query/viz data.
+
+Often use a data lake, like S3 to store data for good I/O characteristics.
+
+---
+
+# Platform automation
+
+Like sagemaker, can automate many parts of the process. Can solve repeatability, scale, and operationalization problems.
+
+---
+
+# MLOps
+
+With CI/CD (DevOps), DataOps, and platform automation in place, we can do MLOps. This partly consists of:
+- train/retrain models
+- deploy+version
+- audit trail and artifacts (e.g. KPIs)
+- monitor (then go back to the beginning with train/retrain)
