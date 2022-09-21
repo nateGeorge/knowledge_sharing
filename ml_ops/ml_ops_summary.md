@@ -13,7 +13,7 @@ Machine learning operations (Machine Learning Model Operationalization Managemen
 
 # Insane number of options and components
 
-![ml tools](./ml_platforms_tools_2021.jpg)
+![ml tools](images/ml_platforms_tools_2021.jpg)
 
 ---
 
@@ -24,7 +24,7 @@ Machine learning operations (Machine Learning Model Operationalization Managemen
 <div>
 
 ## From [awesome-mlops](https://github.com/kelvins/awesome-mlops)
-![height:13cm ml ops](./awesome-ml-ops.jpg)
+![height:13cm ml ops](images/awesome-ml-ops.jpg)
 
 </div>
 
@@ -95,7 +95,7 @@ Tink in in between 1 and 2.
 
 # MLOps level 2 diagram
 
-![height:15cm mlops l2](mlops_level_2.png)
+![height:15cm mlops l2](images/mlops_level_2.png)
 
 * almost everything automated, but not EDA and model analysis
 
@@ -112,7 +112,7 @@ Tink in in between 1 and 2.
 
 <div>
 
-![height:10cm tfx](tfx_flow.png)
+![height:10cm tfx](images/tfx_flow.png)
 
 </div>
 </div>
@@ -120,13 +120,13 @@ Tink in in between 1 and 2.
 ---
 # Typical TFX ML system
 
-![tfx system](typical_tfx_system.png)
+![tfx system](images/typical_tfx_system.png)
 
 ---
 
 # TFX ML system on GCP
 
-![tfx system gcp](tfx_on_gcp.png)
+![tfx system gcp](images/tfx_on_gcp.png)
 
 ---
 
@@ -138,8 +138,7 @@ Tink in in between 1 and 2.
 
 ---
 
-# Noah Gift book on MLOps
-
+# Noah Gift, Alfredo Deza book - Practical MLOps
 MLOps needed to automate ML, like DevOps for software dev
 
 Mazlow's heirarchy of ML:
@@ -179,7 +178,15 @@ Push to production using automated build tools:
 - push to staging, load test
 - push to production and serve
 
+---
+
 # DataOps
 
 Data engineering, e.g. airlfow, AWS Glue, etc, to automate ETL, feature stores, data processing/exports
 
+---
+# DevOps
+
+Foundation for MLOps. First need automated testing / CI. With Python, need a project scaffold:
+
+![python scaffold](images/python_project_scaffold.png)
