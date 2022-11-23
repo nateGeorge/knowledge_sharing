@@ -304,8 +304,43 @@ many operations in Python require 50 times more energy than equivalent operation
 
 ---
 
+# End of chapter 2 - CI/CD on Azure
+
+Noah provides an example of a build setup with Github/Azure
+Idea is creating an API where we send data and get back a prediction
+- Enable Azure pipelines in the github repo
+- Log into Azure shell, clone, install python env for project, and test that app works by running it and sending a request to it
+- Create Azure DevOps project and connect to Azure, then Azure resource manager
+- Configure connection to resource group in Azure
+- create Python pipeline with github integration
+- fill in the yaml with steps to build/lint/test
+---
+
+# Docker best practices
+
+- Use linter like `hadolint` to check dockerfiles:
+`docker run --rm -i hadolint/hadolint < Dockerfile`
+- avoid Common Vulnerabilities and Exposures (CVEs)
+    - make sure to update packages in dockerfile
+    - use `grype` to check for vulneabilities from containers, e.g. `grype python:3.8`
+    - can automate this with linting for docker builds to improve quality/checks/build process
+- label schemas for container tags: http://label-schema.org/rc1/
+- 
+---
+# Edge devices
+- Can use Coral project: https://coral.ai/ for building, has models too
+- TensorFlow Lite
+If device is not plugged in, can get weird tracebacks "Make
+sure that the device is plugged in with the USB cable, otherwise you will
+get a long traceback (which unfortunately doesn’t really explain what the
+problem is)": `ValueError: Failed to load delegate from libedgetpu.1.dylib`
+- Azure percept
+- TFHub
 
 ---
+# Monetizing MLOps
+
+- AWS marketplace - create model, containerize, and sell
 
 ---
 
