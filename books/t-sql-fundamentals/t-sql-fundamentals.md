@@ -1328,4 +1328,83 @@ WHERE shipper_id IN
 
 # Table expressions - derived tables
 
+T-SQL supports four types of table expressions: derived tables, common table expressions (CTEs), views, and inline table-valued functions (inline TVFs)
 
+The benefits of using table expressions are typically related to logical aspects of your code and not to performance. For example, you can use table expressions to simplify your solutions by using a modular approach. Table expressions also help you circumvent certain restrictions in the language, such as the inability to refer to column aliases assigned in the SELECT clause in query clauses that are logically processed before the SELECT clause.
+
+Also APPLY table operator.
+
+---
+
+# Derived tables
+
+Derived tables (also known as table subqueries) are defined in the FROM clause of an outer query. Their scope of existence is the outer query. As soon as the outer query is finished, the derived table is gone.
+
+E.g.
+
+```
+SELECT *
+FROM (SELECT custid, companyname
+      FROM Sales.Customers
+      WHERE country = N'USA') AS USACusts;
+```
+
+standard SQL disallows an ORDER BY clause in queries that are used to define table expressions, unless the ORDER BY serves a purpose other than presentation
+
+If the outer query against the table expression does not have a presentation ORDER BY, the output is not guaranteed to be returned in any particular order.
+
+- Order is not guaranteed
+- all cols must have names and be unique
+
+Can use to alias longer expressions so you can use them in sections that get run before select:
+
+```
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM (SELECT YEAR(orderdate) AS orderyear, custid
+      FROM Sales.Orders) AS D
+GROUP BY orderyear;
+```
+
+Can also alias with "external aliasing":
+
+```
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM (SELECT YEAR(orderdate), custid
+      FROM Sales.Orders) AS D(orderyear, custid)
+GROUP BY orderyear;
+```
+
+
+---
+
+# arguments
+Can use args in query that defines a derived table, e.g.
+
+```
+DECLARE @empid AS INT = 3;
+
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM (SELECT YEAR(orderdate) AS orderyear, custid
+      FROM Sales.Orders
+      WHERE empid = @empid) AS D
+GROUP BY orderyear;
+```
+
+---
+
+# nesting
+
+Can nest but gets confusing
+
+```
+SELECT orderyear, numcusts
+FROM (SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+      FROM (SELECT YEAR(orderdate) AS orderyear, custid
+            FROM Sales.Orders) AS D1
+      GROUP BY orderyear) AS D2
+WHERE numcusts > 70;
+```
+
+---
+
+# Multiple references
