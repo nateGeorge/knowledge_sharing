@@ -1408,3 +1408,340 @@ WHERE numcusts > 70;
 ---
 
 # Multiple references
+
+Issue, The fact that you cannot refer to multiple instances of the same derived table in the same join forces you to maintain multiple copies of the same query definition. This leads to lengthy code that is hard to maintain and prone to errors.
+
+e.g.
+
+```
+SELECT Cur.orderyear,
+  Cur.numcusts AS curnumcusts, Prv.numcusts AS prvnumcusts,
+  Cur.numcusts - Prv.numcusts AS growth
+FROM (SELECT YEAR(orderdate) AS orderyear,
+        COUNT(DISTINCT custid) AS numcusts
+      FROM Sales.Orders
+      GROUP BY YEAR(orderdate)) AS Cur
+  LEFT OUTER JOIN
+     (SELECT YEAR(orderdate) AS orderyear,
+        COUNT(DISTINCT custid) AS numcusts
+      FROM Sales.Orders
+      GROUP BY YEAR(orderdate)) AS Prv
+    ON Cur.orderyear = Prv.orderyear + 1;
+```
+
+Better to use multiple references to the same CTE:
+
+```
+WITH YearlyCount AS
+(
+  SELECT YEAR(orderdate) AS orderyear,
+    COUNT(DISTINCT custid) AS numcusts
+  FROM Sales.Orders
+  GROUP BY YEAR(orderdate)
+)
+SELECT Cur.orderyear,
+  Cur.numcusts AS curnumcusts, Prv.numcusts AS prvnumcusts,
+  Cur.numcusts - Prv.numcusts AS growth
+FROM YearlyCount AS Cur
+  LEFT OUTER JOIN YearlyCount AS Prv
+    ON Cur.orderyear = Prv.orderyear + 1;
+```
+
+ If you want to avoid the repetition of the work done here, you should persist the inner query’s result in a temporary table or a table variable.
+
+
+---
+
+# Common table expressions (CTEs)
+
+```
+WITH <CTE_Name>[(<target_column_list>)]
+AS
+(
+  <inner_query_defining_CTE>
+)
+<outer_query_against_CTE>;
+```
+
+```
+WITH USACusts AS
+(
+  SELECT custid, companyname
+  FROM Sales.Customers
+  WHERE country = N'USA'
+)
+SELECT * FROM USACusts;
+```
+
+can assign column names internal:
+
+```
+WITH C AS
+(
+  SELECT YEAR(orderdate) AS orderyear, custid
+  FROM Sales.Orders
+)
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM C
+GROUP BY orderyear;
+```
+
+or external:
+
+```
+WITH C(orderyear, custid) AS
+(
+  SELECT YEAR(orderdate), custid
+  FROM Sales.Orders
+)
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM C
+GROUP BY orderyear;
+```
+
+can use multiple CTEs separated by comma:
+
+```
+WITH C1 AS
+(
+  SELECT YEAR(orderdate) AS orderyear, custid
+  FROM Sales.Orders
+),
+C2 AS
+(
+  SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+  FROM C1
+  GROUP BY orderyear
+)
+SELECT orderyear, numcusts
+FROM C2
+WHERE numcusts > 70;
+```
+
+---
+
+# CTE recursion
+
+They support recursion:
+
+```
+WITH <CTE_Name>[(<target_column_list>)]
+AS
+(
+  <anchor_member>
+  UNION ALL
+  <recursive_member>
+)
+<outer_query_against_CTE>;
+```
+
+The anchor member is a query that returns a valid relational result table—like a query that is used to define a nonrecursive table expression. The anchor member query is invoked only once.
+
+The recursive member is a query that has a reference to the CTE name and is invoked repeatedly until it returns an empty set.
+
+e.g. to get all info about employee and all subordinates:
+
+```
+WITH EmpsCTE AS
+(
+  SELECT empid, mgrid, firstname, lastname
+  FROM HR.Employees
+  WHERE empid = 2
+
+  UNION ALL
+
+  SELECT C.empid, C.mgrid, C.firstname, C.lastname
+  FROM EmpsCTE AS P
+    INNER JOIN HR.Employees AS C
+      ON C.mgrid = P.empid
+)
+SELECT empid, mgrid, firstname, lastname
+FROM EmpsCTE;
+```
+
+Will get all subordinates, recursively.
+
+Can have a problem of infinitely running, SQL server restricts runs to 100 by default. Can change with OPTION(MAXRECURSION n) n is 0 through 32,767, 0 removes limit
+
+
+---
+
+# Views
+
+Views and inline table-valued functions (inline TVFs) are two types of table expressions whose definitions are stored as permanent objects in the database, making them reusable.
+
+```
+DROP VIEW IF EXISTS Sales.USACusts;
+GO
+CREATE VIEW Sales.USACusts
+AS
+
+SELECT
+  custid, companyname, contactname, contacttitle, address,
+  city, region, postalcode, country, phone, fax
+FROM Sales.Customers
+WHERE country = N'USA';
+GO
+```
+
+can use external column aliasing by specifying the target column names in parentheses immediately after the view name.
+
+can refresh the view’s metadata by using the stored procedure sp_refreshview or sp_refreshsqlmodule, but to avoid confusion, the best practice is to explicitly list the column names you need in the definition of the view
+
+If columns are added to the underlying tables and you need them in the view, use the ALTER VIEW statement to revise the view definition accordingly.
+
+ORDER BY in views only allowed with TOP, OFFSET-FETCH, or FOR XML
+
+even with TOP (100) PERCENT doesn't guarantee order from view
+
+In the header of the view, under the WITH clause, you can specify attributes such as ENCRYPTION and SCHEMABINDING, and at the end of the query you can specify WITH CHECK OPTION
+
+## ENCRYPTION option
+
+internally store the text with the definition of the object in an obfuscated format, text only visible to users with privelidges
+
+## SCHEMABINDING 
+
+binds the schema of referenced objects and columns to the schema of the referencing object
+requires: query is not allowed to use * in the SELECT clause; instead, you have to explicitly list column names
+
+
+## CHECK OPTION
+
+prevent modifications through the view that conflict with the view’s filter
+If you want to prevent modifications that conflict with the view’s filter, add WITH CHECK OPTION at the end of the query defining the view
+
+prevents writing/inserting to base table that view uses
+
+---
+
+# Inline table-valued functions (Inline TVFs)
+
+Inline TVFs are reusable table expressions that support input parameters. In most respects, except for the support for input parameters, inline TVFs are similar to views. For this reason, I like to think of inline TVFs as parameterized views
+
+T-SQL supports another type of table function called multi-statement TVF, which populates and returns a table variable. This type isn’t considered a table expression because it’s not based on a query.
+
+example of inline TVF:
+
+```
+USE TSQLV4;
+DROP FUNCTION IF EXISTS dbo.GetCustOrders;
+GO
+CREATE FUNCTION dbo.GetCustOrders
+  (@cid AS INT) RETURNS TABLE
+AS
+RETURN
+  SELECT orderid, custid, empid, orderdate, requireddate,
+    shippeddate, shipperid, freight, shipname, shipaddress, shipcity,
+    shipregion, shippostalcode, shipcountry
+  FROM Sales.Orders
+  WHERE custid = @cid;
+GO
+```
+
+delete with
+
+`DROP FUNCTION IF EXISTS dbo.GetCustOrders;`
+
+---
+
+# APPLY operator
+
+used in FROM
+- CROSS APPLY, OUTER APPLY
+CROSS APPLY implements only one logical-query processing phase, whereas OUTER APPLY implements two
+- APPLY isn’t standard; the standard counterpart is called LATERAL, but the standard form wasn’t implemented in SQL Server.
+
+The APPLY operator operates on two input tables; I’ll refer to them as the “left” and “right” tables. The right table is typically a derived table or a TVF. The CROSS APPLY operator implements one logical-query processing phase—it applies the right table to each row from the left table and produces a result table with the unified result sets.
+
+similar to cross join, e.g. the following are equivalent:
+
+```
+SELECT S.shipperid, E.empid
+FROM Sales.Shippers AS S
+  CROSS JOIN HR.Employees AS E;
+
+SELECT S.shipperid, E.empid
+FROM Sales.Shippers AS S
+  CROSS APPLY HR.Employees AS E;
+```
+
+difference is the right side can have references to elements from the left
+
+e.g.
+
+```
+SELECT C.custid, A.orderid, A.orderdate
+FROM Sales.Customers AS C
+  CROSS APPLY
+    (SELECT TOP (3) orderid, empid, orderdate, requireddate
+     FROM Sales.Orders AS O
+     WHERE O.custid = C.custid
+     ORDER BY orderdate DESC, orderid DESC) AS A;
+```
+
+could also use offset-fetch:
+
+```
+SELECT C.custid, A.orderid, A.orderdate
+FROM Sales.Customers AS C
+  CROSS APPLY
+    (SELECT orderid, empid, orderdate, requireddate
+     FROM Sales.Orders AS O
+     WHERE O.custid = C.custid
+     ORDER BY orderdate DESC, orderid DESC
+     OFFSET 0 ROWS FETCH NEXT 3 ROWS ONLY) AS A;
+```
+
+If you want to return rows from the left side even if there are no matches on the right side, use OUTER APPLY (cross apply will return an empty set)
+
+similar to left outer join
+
+e.g.
+
+```
+SELECT C.custid, A.orderid, A.orderdate
+FROM Sales.Customers AS C
+  OUTER APPLY
+    (SELECT TOP (3) orderid, empid, orderdate, requireddate
+     FROM Sales.Orders AS O
+     WHERE O.custid = C.custid
+     ORDER BY orderdate DESC, orderid DESC) AS A;
+```
+
+You might find it more convenient to work with inline TVFs instead of derived tables. This way, your code will be simpler to follow and maintain.
+
+e.g.
+
+```
+DROP FUNCTION IF EXISTS dbo.TopOrders;
+GO
+CREATE FUNCTION dbo.TopOrders
+  (@custid AS INT, @n AS INT)
+  RETURNS TABLE
+AS
+RETURN
+  SELECT TOP (@n) orderid, empid, orderdate, requireddate
+  FROM Sales.Orders
+  WHERE custid = @custid
+  ORDER BY orderdate DESC, orderid DESC;
+GO
+
+SELECT
+  C.custid, C.companyname,
+  A.orderid, A.empid, A.orderdate, A.requireddate
+FROM Sales.Customers AS C
+  CROSS APPLY dbo.TopOrders(C.custid, 3) AS A;
+```
+
+---
+
+# conclusion
+
+When you need to use table expressions and are not planning to reuse their definitions, use derived tables or CTEs. CTEs have a couple of advantages over derived tables; they are easier to maintain because you do not nest them like you do derived tables. Also, you can refer to multiple instances of the same CTE, which you cannot do with derived tables.
+
+CTE = common table expressions, WITH
+
+When you need to define reusable table expressions, use views or inline TVFs. When you do not need to support input parameters, use views; otherwise, use inline TVFs.
+
+Use the APPLY operator when you want to apply a correlated table expression to each row from a source table and unify all result sets into one result table.
